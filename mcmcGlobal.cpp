@@ -10,8 +10,8 @@
 // Reads csv file in the format specified by data field codes. Handles experiments at different concentration
 // by constructing experimental id's.
 // 
-// Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal
-// Uses C++11
+// Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal -lboost_system -lboost_program_options
+// Uses C++11 and <boost>
 //
 // Authors:  Simon Koplev (skoplev@gmail.com)
 
@@ -27,6 +27,8 @@
 #include <cmath>
 #include <array>
 #include <utility>  // for pair
+#include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 
 // DEBUG PRINT
 // ----------------------------
@@ -53,6 +55,8 @@
 #define NPAR 3  // number of response curve paramters
 
 using namespace std;
+namespace po = boost::program_options;
+namespace fs = boost::filesystem;
 
 // split() 
 // ----------------------------
@@ -339,39 +343,116 @@ double qprior(double old_par, double new_par, BetaPrior bp) {
 }
 
 void printUsage(string program_name) {
-	cout << "USAGE: " << program_name
-		<< " [STRAIN]" << endl;
+	cout << "USAGE: " << program_name << " FILE"
+		<< " <options>" << endl;
 }
 
 bool validStrain(string strain_name) {
 	return strain_name == "PANC1" || strain_name == "A375";
 }
 
+// options, set by <boost/program_options>
+// Global variable
+struct Options {
+	int iterations;
+	int burn;
+	int subsample;  // store every nth parameter set.
+	int init_phase;  // relies on init_lambda to be true.
+	string strain;
+	string data_file;
+	string out_dir;  // output directory
+} options;
+
 int main(int argc, char const *argv[])
 {
-	// User input
-	if (argc != 2) {
+	// Parse commandline arguments
+
+	// Declare global arguments
+
+	// int iterations = 500000;
+	// int burn = 100000;
+	// int subsample = 200;  // store every nth parameter set.
+	// int init_phase = 20000;  // relies on init_lambda to be true.
+
+	po::options_description opts_desc("Options");
+
+	try {
+		// Configure command-line options
+		po::variables_map vm;
+
+		// Positional arguments
+		opts_desc.add_options()
+			("file",
+				po::value<string>(&options.data_file)->required(),
+				"Path to .tsv data file containing cell viability data in flat format -- one viability measurement per line.")
+			;
+
+		// Optional arguments
+		opts_desc.add_options()
+			("out,o",
+				po::value<string>(&options.out_dir)->default_value("."),
+				"Output directory to print sampled MCMC parameters.")
+			("cell,c",
+				po::value<std::string>(&options.strain),
+				"Cell type to use from input data")
+			("iterations,i",
+				po::value<int>(&options.iterations)->default_value(500000),
+				"Total MCMC iterations to evaluate.")
+			("burn,b",
+				po::value<int>(&options.burn)->default_value(100000),
+				"MCMC burn iterations")
+			("subsample,s",
+				po::value<int>(&options.subsample)->default_value(200),
+				"MCMC subsample every s iterations for output.")
+			("init,n",
+				po::value<int>(&options.init_phase)->default_value(20000),
+				"Iterations used for initial choice of lambda.")
+			("help,h", "Help screen")
+			;
+
+
+		po::positional_options_description p;
+		p.add("file", -1);
+
+		po::command_line_parser parser(argc, argv);
+		parser.options(opts_desc).positional(p);
+		po::parsed_options parsed_options = parser.run();
+
+		// po::store(po::parse_command_line(argc, argv, opts_desc), vm);
+		po::store(parsed_options, vm);
+		po::notify(vm);
+
+		if (vm.count("help") || argc == 1) {
+			printUsage(argv[0]);
+			std::cout << opts_desc << std::endl;  // print options
+			exit(EXIT_SUCCESS);
+		}
+	} catch (const po::error &e) {
+		std::cerr << e.what() << std::endl;
 		printUsage(argv[0]);
+		cerr << opts_desc << endl;
+		exit(EXIT_SUCCESS);
+	} catch (const std::exception &e) {
+		std::cerr << e.what() << std::endl;
 		exit(EXIT_FAILURE);
 	}
 
-	if (!validStrain(string(argv[1]))) {
-		printUsage(argv[0]);
-		exit(EXIT_FAILURE);
-	}
+	// Print input arguments
+	cout << argv[0] << " called with arguments:" << endl;
+	cout << "\tfile: " << options.data_file << endl;
+	cout << "\tout_dir: " << options.out_dir << endl;
+	cout << "\tStrain: " << options.strain << endl;
+	cout << "\tburn: " << options.burn << endl;
+	cout << "\titerations: " << options.iterations << endl;
+	cout << "\tsubsample: " << options.subsample << endl;
+	cout << "\tinit_phase: " << options.init_phase << endl;
 
-	string strain(argv[1]);
 
-	string project_dir = "/Users/sk/Google Drive/projects/lindingBayesian/";  // project directory
-
-	int iterations = 500000;
-	int burn = 100000;
-	int subsample = 200;  // store every nth parameter set.
-	int init_phase = 20000;  // relies on init_lambda to be true.
+	return 0;  // Debug exit
 
 	// data
 	// string data_file_name = "all_data_linReg_validation.csv";  // was all_data_q75_norm.csv. Includes 2nd round validation
-	string data_file_name = "all_data_linregnorm.csv";  // primary screen
+	// string data_file_name = "all_data_linregnorm.csv";  // primary screen
 
 	// Initial values
 	double init_beta = 1.0;
@@ -409,7 +490,7 @@ int main(int argc, char const *argv[])
 	double beta_prop_sd = 0.1;
 
 	// output files
-	string out_folder = project_dir + "mcmcOut/" + strain + "/";
+	// string out_folder = project_dir + "mcmcOut/" + strain + "/";
 
 	// Parse data
 	// -----------------------------------------------------
@@ -421,8 +502,7 @@ int main(int argc, char const *argv[])
 	int max_run = 0;  // highest run number
 	{
 		// Read whole data set into string vector
-		string data_file_path = "/Users/sk/Google Drive/projects/lindingBayesian/data/" + data_file_name;
-		std::vector<std::string> viability_data = readFile(data_file_path);
+		std::vector<std::string> viability_data = readFile(options.data_file);
 		cout << "observations: " << viability_data.size() - 1 << endl;
 
 		cout << "Transforming data..." << endl;
@@ -432,7 +512,7 @@ int main(int argc, char const *argv[])
 			vector<string> row = split(viability_data[i], ',');
 			Observation obs = parseRow(row);
 
-			if (obs.strain != strain) continue;  // exclude strains not included in analysis
+			if (obs.strain != options.strain) continue;  // exclude strains not included in analysis
 
 			// Include drugs for which AB data is available
 			if (obs.experiment == "AB") {
@@ -473,7 +553,11 @@ int main(int argc, char const *argv[])
 	}
 
 	// Print drug list
-	ofstream drugs_file(out_folder + "drugs.csv");
+	// fs::path out_path = fs::path(options.out_dir) / fs::path("drugs.csv");
+	// ofstream drugs_file(out_path.string());
+	ofstream drugs_file(
+		(fs::path(options.out_dir) / fs::path("drugs.csv"))  // constructs path
+		.string());
 	drugs_file << drugs_vec << endl;
 	drugs_file.close();
 
@@ -523,11 +607,25 @@ int main(int argc, char const *argv[])
 	// ------------------------------------------------------------------ 
 	cout << "Initializing MCMC..." << endl;
 
-	ofstream theta_file(out_folder + "theta.csv");  // overwrites previous file by default
-	ofstream theta_AB_file(out_folder + "theta_AB.csv");
-	ofstream lambda_file(out_folder + "lambda.csv");
-	ofstream lambda_AB_file(out_folder + "lambda_AB.csv");
-	ofstream beta_residual_file(out_folder + "beta_residual.csv");
+	ofstream theta_file(
+		(fs::path(options.out_dir) / fs::path("theta.csv"))
+		.string()
+		);  // overwrites previous file by default
+	ofstream theta_AB_file(
+		(fs::path(options.out_dir) / fs::path("theta_AB.csv"))
+		.string());
+	ofstream lambda_file(
+		(fs::path(options.out_dir) / fs::path("lambda.csv"))
+		.string()
+		);
+	ofstream lambda_AB_file(
+		(fs::path(options.out_dir) / fs::path("lambda_AB.csv"))
+		.string()
+		);
+	ofstream beta_residual_file(
+		(fs::path(options.out_dir) / fs::path("beta_residual.csv"))
+		.string()
+		);
 
 	if (!theta_file.is_open() || 
 		!theta_AB_file.is_open() || 
@@ -566,9 +664,9 @@ int main(int argc, char const *argv[])
 
 	cout << "Running MCMC analysis..." << endl;
 	cout.precision(15);
-	for (int iter = 0; iter < iterations; iter++) {
+	for (int iter = 0; iter < options.iterations; iter++) {
 		if (iter % 100 == 0) {
-			cout << "Iteration " << iter << " out of " << iterations << endl;
+			cout << "Iteration " << iter << " out of " << options.iterations << endl;
 		}
 
 		// Beta residual proposal
@@ -638,7 +736,7 @@ int main(int argc, char const *argv[])
 		for (int a = 0; a < drugs.size(); a++) {
 			// Propose lambda and theta for single drug.
 			bool new_lambda;
-			if (iter < init_phase) {
+			if (iter < options.init_phase) {
 				new_lambda = true;  // Forced on in initial phase to settle starting parameters
 			} else {
 				if (flip(generator)) {
@@ -824,7 +922,7 @@ int main(int argc, char const *argv[])
 		for (int a = 0; a < drugs.size(); a++) {
 			for (int b = 0; b < drugs.size(); b++) {
 				bool new_lambda;
-				if (iter < init_phase) {
+				if (iter < options.init_phase) {
 					// new_lambda = false;  // model depends only on single drug components
 					new_lambda = true;  // 
 				} else {
@@ -930,7 +1028,7 @@ int main(int argc, char const *argv[])
 		}
 
 		// Store parameter set in files
-		if (iter > burn && iter % subsample == 0) {
+		if (iter > options.burn && iter % options.subsample == 0) {
 			beta_residual_file << beta_residual << endl;
 
 			lambda_file << lambda << endl;
