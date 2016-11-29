@@ -13,7 +13,16 @@
 // Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal -lboost_system -lboost_program_options
 // Uses C++11 and <boost>
 //
+// Old data specification used for analysis
+// string data_file_name = "all_data_linReg_validation.csv";  // was all_data_q75_norm.csv. Includes 2nd round validation
+// string data_file_name = "all_data_linregnorm.csv";  // primary screen
+// int iterations = 500000;
+// int burn = 100000;
+// int subsample = 200;  // store every nth parameter set.
+// int init_phase = 20000;  // relies on init_lambda to be true.
+//
 // Authors:  Simon Koplev (skoplev@gmail.com)
+// 
 
 #include <iostream>
 #include <random>
@@ -366,14 +375,6 @@ struct Options {
 int main(int argc, char const *argv[])
 {
 	// Parse commandline arguments
-
-	// Declare global arguments
-
-	// int iterations = 500000;
-	// int burn = 100000;
-	// int subsample = 200;  // store every nth parameter set.
-	// int init_phase = 20000;  // relies on init_lambda to be true.
-
 	po::options_description opts_desc("Options");
 
 	try {
@@ -410,7 +411,6 @@ int main(int argc, char const *argv[])
 			("help,h", "Help screen")
 			;
 
-
 		po::positional_options_description p;
 		p.add("file", -1);
 
@@ -418,7 +418,6 @@ int main(int argc, char const *argv[])
 		parser.options(opts_desc).positional(p);
 		po::parsed_options parsed_options = parser.run();
 
-		// po::store(po::parse_command_line(argc, argv, opts_desc), vm);
 		po::store(parsed_options, vm);
 		po::notify(vm);
 
@@ -446,13 +445,6 @@ int main(int argc, char const *argv[])
 	cout << "\titerations: " << options.iterations << endl;
 	cout << "\tsubsample: " << options.subsample << endl;
 	cout << "\tinit_phase: " << options.init_phase << endl;
-
-
-	return 0;  // Debug exit
-
-	// data
-	// string data_file_name = "all_data_linReg_validation.csv";  // was all_data_q75_norm.csv. Includes 2nd round validation
-	// string data_file_name = "all_data_linregnorm.csv";  // primary screen
 
 	// Initial values
 	double init_beta = 1.0;
@@ -488,9 +480,6 @@ int main(int argc, char const *argv[])
 	bernoulli_distribution flip(switch_prop);
 	array<double, NPAR> prop_sd = {0.5, 0.1, 0.1};   // logN, N, N : K, h, alpha
 	double beta_prop_sd = 0.1;
-
-	// output files
-	// string out_folder = project_dir + "mcmcOut/" + strain + "/";
 
 	// Parse data
 	// -----------------------------------------------------
@@ -553,8 +542,6 @@ int main(int argc, char const *argv[])
 	}
 
 	// Print drug list
-	// fs::path out_path = fs::path(options.out_dir) / fs::path("drugs.csv");
-	// ofstream drugs_file(out_path.string());
 	ofstream drugs_file(
 		(fs::path(options.out_dir) / fs::path("drugs.csv"))  // constructs path
 		.string());
