@@ -356,10 +356,6 @@ void printUsage(string program_name) {
 		<< " <options>" << endl;
 }
 
-bool validStrain(string strain_name) {
-	return strain_name == "PANC1" || strain_name == "A375";
-}
-
 // options, set by <boost/program_options>
 // Global variable
 struct Options {
