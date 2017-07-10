@@ -9,8 +9,9 @@
 // 
 // Reads csv file in the format specified by data field codes. Handles experiments at different concentration
 // by constructing experimental id's.
+// Input csv file must not contain quoted strings.
 // 
-// Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal -lboost_system -lboost_program_options
+// Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal -lboost_system -lboost_program_options -lboost_filesystem-mt
 // Uses C++11 and <boost>
 //
 // Old data specification used for analysis
@@ -143,8 +144,19 @@ Observation parseRow(const vector<string> &d) {
 	Observation obs;
 	obs.experiment = d[FIELD_EXPERIMENT];
 	obs.strain = d[FIELD_STRAIN];
-	obs.run = stoi(d[FIELD_RUN]) - 1;  // to zero indexed
-	obs.plate = stoi(d[FIELD_PLATE]) - 1;
+
+	try {
+		obs.run = stoi(d[FIELD_RUN]) - 1;  // to zero indexed
+	} catch (const std::exception& e) {
+		obs.run = 0;  // default value, runs are only used for printing, not for calculations
+	}
+
+	try {
+		obs.plate = stoi(d[FIELD_PLATE]) - 1;
+	} catch (const std::exception& e) {
+		obs.plate = 0;
+	}
+
 	obs.pretreatment = d[FIELD_PRETREATMENT];
 	obs.compound = d[FIELD_COMPOUND];
 	obs.concentration = stod(d[FIELD_CONCENTRATION]);
@@ -648,7 +660,7 @@ int main(int argc, char const *argv[])
 	cout << "Running MCMC analysis..." << endl;
 	cout.precision(15);
 	for (int iter = 0; iter < options.iterations; iter++) {
-		if (iter % 100 == 0) {
+		if (iter % 1000 == 0) {
 			cout << "Iteration " << iter << " out of " << options.iterations << endl;
 		}
 
