@@ -1,5 +1,32 @@
 # Functions for parsing and interpretting MCMC
 
+# Decodes vector of ; (default) separated strings. 3 parameters by default.
+# Returns numeric matrix.
+decodeParamVector = function(param_vec, par_names=c("K", "h", "alpha"), sep=";") {
+	mat = matrix(
+		unlist(
+			strsplit(param_vec, sep)
+		),
+		ncol=3,
+		byrow=TRUE
+	)
+	colnames(mat) = par_names
+	mat = apply(mat, 2, as.numeric)  # char->numeric
+	return(mat)
+}
+
+# Casts flat format into 3d array
+sampleArrayCast = function(flat) {
+	theta = abind(
+		acast(flat, sample~variable, value.var="K"),
+		acast(flat, sample~variable, value.var="h"),
+		acast(flat, sample~variable, value.var="alpha"),
+		along=3
+	)
+	dimnames(theta)[[3]] = c("K", "h", "alpha")
+	return(theta)
+}
+
 # Parses output files from mcmcGlobal fitting run.
 # folder is the directory that the .csv MCMC sample files are stored.
 parseMCMC = function(folder) {
@@ -11,11 +38,15 @@ parseMCMC = function(folder) {
 	require(stringr)
 	require(abind)
 
+	require(dplyr)
+
 	d = list()
 
 	# Load MCMC samples for the strain in specified folder
 	# --------------------------------------------------------
 
+	message("loading parameter samples...")
+	message("\tsingle-drug parameters...")
 	# Load drug indices
 	d$drugs = fread(file.path(folder, "drugs.csv"),
 		nrows=1,
@@ -39,75 +70,70 @@ parseMCMC = function(folder) {
 
 	# Expand theta (parameters) matrix.
 	# Returns character matrix.
-	theta_mat = matrix(
-		unlist(
-			strsplit(theta_tmp_flat$value, ";")
-		),
-		ncol=3,
-		byrow=TRUE
-	)
-	colnames(theta_mat) = c("K", "h", "alpha")
-	theta_mat = apply(theta_mat, 2, as.numeric)  # char->numeric
+	theta_mat = decodeParamVector(theta_tmp_flat$value)
 
 	# Combine flat 
-	theta_tmp_flat = cbind(theta_tmp_flat, theta_mat)
+	theta_tmp_flat = do.call(cbind, list(theta_tmp_flat, theta_mat))
 
-	# Drop ; separated string
-	# theta_tmp_flat = theta_tmp_flat[, colnames(theta_tmp_flat) != "value"]
+	d$theta = sampleArrayCast(theta_tmp_flat)
 
-	d$theta = abind(
-		acast(theta_tmp_flat, sample~variable, value.var="K"),
-		acast(theta_tmp_flat, sample~variable, value.var="h"),
-		acast(theta_tmp_flat, sample~variable, value.var="alpha"),
-		along=3
-	)
-	dimnames(d$theta)[[3]] = c("K", "h", "alpha")
-
-	# d$theta = array(dim=c(nrow(theta_tmp), ncol(theta_tmp), 3));
-	# for (i in 1:nrow(theta_tmp)) {
-	# 	for (j in 1:ncol(theta_tmp)) {
-	# 			row = strsplit(toString(theta_tmp[i, j]), ";")
-	# 			d$theta[i, j,] = as.numeric(row[[1]])
-	# 	}
-	# }
-
-	message("loading lambdas...")
+	message("\tcombinatorial lambdas...")
 	# Combined experiments
 	lambda_AB_tmp = fread(file.path(folder, "lambda_AB.csv"),
 		header=FALSE)
 	lambda_AB_tmp = as.matrix(lambda_AB_tmp)
 
-	message("loading lambdas...")
 	d$lambda_AB = array(dim=c(nrow(lambda_AB_tmp), length(d$drugs), length(d$drugs)))
+	# For loop is quick enough.
 	for (i in 1:nrow(lambda_AB_tmp)) {
-		d$lambda_AB[i,,] = matrix(lambda_AB_tmp[i,], ncol=length(d$drugs), nrow=length(d$drugs), byrow=TRUE)
+		d$lambda_AB[i,,] = matrix(lambda_AB_tmp[i,], ncol=length(d$drugs), nrow=length(d$drugs),
+			byrow=TRUE)
 	}
+
+	dimnames(d$lambda_AB)[[2]] = d$drugs
+	dimnames(d$lambda_AB)[[3]] = d$drugs
+	names(dimnames(d$lambda_AB)) = c("Sample", "First", "Second")
 
 	# Data structure transformations
 	# ----------------------------------------------------
 	# Convert theta_AB_tmp to array. Takes ~5min or longer
-	message("loading thetas...")
+	message("\tcombinatorial thetas...")
 
+	# Load rows of vectors of parameter sets.
+	# Each row vector encodes a complete set of combinatorial parameter sets.
 	theta_AB_tmp = fread(file.path(folder, "theta_AB.csv"),
 		header=FALSE)
 
-	d$theta_AB = array(dim=(c(nrow(theta_AB_tmp), ncol(theta_AB_tmp), 3)))
-	for (i in 1:nrow(theta_AB_tmp)) {
-		row = sapply(theta_AB_tmp[i,], toString)  # list of strings
-		row = sapply(row, strsplit, ";")
+	# Parse parameters
+	drug_comb = expand.grid(d$drugs, d$drugs)[, 2:1]
+	colnames(drug_comb) = c("first", "second")
+	colnames(theta_AB_tmp) = apply(drug_comb, 1, paste, collapse="_")  # by-row encoding of matrix
+	theta_AB_tmp$sample = 1:nrow(theta_AB_tmp)
 
-		for (j in 1:length(row)) {
-			d$theta_AB[i, j,] = as.numeric(row[[j]])
-		}
-	}
+	# FLatten ; separated values by condition
+	theta_AB_flat = melt(theta_AB_tmp, id.vars="sample")
 
-	# Convert to array for [a][b] access
-	d$theta_AB_arr = array(dim=c(nrow(theta_AB_tmp), length(d$drugs), length(d$drugs), 3))
-	for (i in 1:nrow(theta_AB_tmp)) {
-		for (j in 1:3) {
-			d$theta_AB_arr[i,,,j] = matrix(d$theta_AB[i,,j], ncol=length(d$drugs), nrow=length(d$drugs), byrow=TRUE)
-		}
-	}
+	# Evaluate ; separated parameters
+	theta_AB_mat = decodeParamVector(theta_AB_flat$value)
+
+	# Separate drug combination IDs, first and second treatment.
+	drug_ids = matrix(
+		unlist(strsplit(as.character(theta_AB_flat$variable), "_")),
+		ncol=2,
+		byrow=TRUE
+	)
+	colnames(drug_ids) = c("first", "second")
+
+	theta_AB_flat = bind_cols(theta_AB_flat, as.data.frame(drug_ids), as.data.frame(theta_AB_mat))  # from dplyr, fast
+
+	# Combine samples into arrays
+	d$theta_AB = abind(
+		acast(theta_AB_flat, sample~first~second, value.var="K"),
+		acast(theta_AB_flat, sample~first~second, value.var="h"),
+		acast(theta_AB_flat, sample~first~second, value.var="alpha"),
+		along=4
+	)
+	dimnames(d$theta_AB)[[4]] = c("K", "h", "alpha")
 
 	return(d)
 }

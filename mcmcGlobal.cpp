@@ -636,7 +636,9 @@ int main(int argc, char const *argv[])
 	vector<bool> lambda;
 	lambda.resize(drugs.size(), init_lambda);
 
-	vector<bool> lambda_AB;  // matrix
+	// Complete (full) matrix of lambdas for all drug combinations
+	// row first treatment, column second treatment
+	vector<bool> lambda_AB;
 	lambda_AB.resize(drugs.size() * drugs.size(), init_lambda_AB);
 
 	vector<array<double, NPAR> > theta;
