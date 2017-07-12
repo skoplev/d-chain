@@ -27,6 +27,15 @@ sampleArrayCast = function(flat) {
 	return(theta)
 }
 
+# Dose-response model
+response <- function(conc, par) {
+	K <- par[1]
+	h <- par[2]
+	alpha <- par[3]
+	out <- ((1 - alpha) / (1 + (K * conc)^h)) + alpha
+	return(out)
+}
+
 # Parses output files from mcmcGlobal fitting run.
 # folder is the directory that the .csv MCMC sample files are stored.
 parseMCMC = function(folder) {
@@ -55,9 +64,11 @@ parseMCMC = function(folder) {
 
 	d$beta_residual = fread(file.path(folder, "beta_residual.csv"),
 		header=FALSE)  # residual norm factor
+	d$beta_residual = as.data.frame(d$beta_residual)
 
 	d$lambda = fread(file.path(folder, "lambda.csv"),
 		header=FALSE)
+	d$lambda = as.data.frame(d$lambda)
 
 	# Theta, single drugs
 	theta_tmp = fread(file.path(folder, "theta.csv"),
@@ -137,3 +148,48 @@ parseMCMC = function(folder) {
 
 	return(d)
 }
+
+summaryStatisticsMCMC = function(mcmc) {
+	d = list()  # output data
+	d$beta_residual_mean = apply(mcmc$beta_residual, 2, mean)  # pretreatment specific renormalization
+	d$lambda_mean = apply(mcmc$lambda, 2, mean)  # baseline 
+
+	# baseline parameters
+	d$theta_mean = array(NA, dim=c(length(mcmc$drugs), 3))  # conditional (on lambda) parameters
+	for (i in 1:length(mcmc$drugs)) {
+		id = which(as.logical(mcmc$lambda[,i]))  # iterations where parameters are used
+		if (length(id) > 1) {
+			d$theta_mean[i,] = apply(mcmc$theta[id,i,], 2, mean)
+		} else if (sum(id) == 1) {
+			d$theta_mean[i,] = mcmc$theta[id,i,]
+		} else {
+			d$theta_mean[i,] <- c(0, 1.5, 0)  # default
+		}
+	}
+
+	# Calculate average parameters, lambda_AB
+	d$lambda_AB_mean = matrix(0.0, ncol=length(mcmc$drugs), nrow=length(mcmc$drugs))
+	for (i in 1:dim(mcmc$lambda_AB)[1]) {
+		d$lambda_AB_mean = d$lambda_AB_mean + mcmc$lambda_AB[i,,]
+	}
+	d$lambda_AB_mean = d$lambda_AB_mean / dim(mcmc$lambda_AB)[1]
+
+	# theta_AB
+	init_par = c(0.01, 1.5, 0.0)
+	d$theta_AB_mean = array(NA, dim=c(length(mcmc$drugs), length(mcmc$drugs), 3))
+	for (a in 1:length(mcmc$drugs)) {
+		for (b in 1:length(mcmc$drugs)) {
+			id = mcmc$lambda_AB[,a,b] == TRUE
+			if (sum(id) > 1) {
+				d$theta_AB_mean[a, b,] = apply(mcmc$theta_AB[id, a, b,], 2, mean)
+			} else if (sum(id) == 1) {
+				d$theta_AB_mean[a, b,] = mcmc$theta_AB[id, a, b,]
+			} else {
+				d$theta_AB_mean[a, b,] = init_par
+			}
+		}
+	}
+
+	return(d)
+}
+
