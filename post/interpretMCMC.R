@@ -1,5 +1,15 @@
 # Functions for parsing and interpretting MCMC
 
+require(data.table)
+require(compiler)
+enableJIT(3)
+
+require(reshape2)
+require(stringr)
+require(abind)
+
+require(dplyr)
+
 # Decodes vector of ; (default) separated strings. 3 parameters by default.
 # Returns numeric matrix.
 decodeParamVector = function(param_vec, par_names=c("K", "h", "alpha"), sep=";") {
@@ -39,16 +49,6 @@ response <- function(conc, par) {
 # Parses output files from mcmcGlobal fitting run.
 # folder is the directory that the .csv MCMC sample files are stored.
 parseMCMC = function(folder) {
-	require(data.table)
-	require(compiler)
-	enableJIT(3)
-
-	require(reshape2)
-	require(stringr)
-	require(abind)
-
-	require(dplyr)
-
 	d = list()
 
 	# Load MCMC samples for the strain in specified folder
@@ -150,6 +150,7 @@ parseMCMC = function(folder) {
 }
 
 summaryStatisticsMCMC = function(mcmc) {
+	message("Calculating MCMC summary statistics...")
 	d = list()  # output data
 	d$beta_residual_mean = apply(mcmc$beta_residual, 2, mean)  # pretreatment specific renormalization
 	d$lambda_mean = apply(mcmc$lambda, 2, mean)  # baseline 
@@ -190,6 +191,35 @@ summaryStatisticsMCMC = function(mcmc) {
 		}
 	}
 
+	# Synergy index calculation based on MCMC samples
+	# -------------------------------------------------
+	nsample = nrow(mcmc$lambda)
+	synergy_index = array(0.0, dim=c(nsample, length(mcmc$drugs), ncol=length(mcmc$drugs)))
+
+	s = seq(0.01, 10, length.out=10)  # evaluation points for integral
+	for (a in 1:length(mcmc$drugs)) {
+		if (a %% 10 == 0) {
+			cat("Iteration (drug) ", a, " out of ", length(mcmc$drugs), "\n")
+		}
+		for (b in 1:length(mcmc$drugs)) {
+			for (i in 1:nsample) {
+				baseline = (1 - mcmc$lambda[i, b]) + mcmc$lambda[i, b] * (response(s, mcmc$theta[i, b,]))
+				resp = (1 - mcmc$lambda_AB[i, a, b]) * baseline + mcmc$lambda_AB[i, a, b] * response(s, mcmc$theta_AB[i, a, b,])
+
+				synergy_index[i, a, b] = mean(baseline - resp)
+			}
+		}
+	}
+
+
+	d$synergy_index_mean = matrix(NA, length(mcmc$drugs), length(mcmc$drugs))
+	d$synergy_index_sd = matrix(NA, length(mcmc$drugs), length(mcmc$drugs))
+	for (a in 1:length(mcmc$drugs)) {
+		for (b in 1:length(mcmc$drugs)) {
+			d$synergy_index_mean[a, b] = mean(synergy_index[,a,b])
+			d$synergy_index_sd[a, b] = sd(synergy_index[,a,b])
+		}
+	}
+	message("done.")
 	return(d)
 }
-
