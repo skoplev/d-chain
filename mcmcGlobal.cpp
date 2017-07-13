@@ -511,9 +511,10 @@ int main(int argc, char const *argv[])
 
 			if (obs.strain != options.strain) continue;  // exclude strains not included in analysis
 
-			// Include drugs for which AB data is available
+			// Include drugs for which AB data is available, both pre- and main treatment, both pre- and main treatment.
 			if (obs.experiment == "AB") {
 				drugs.insert(obs.compound);
+				drugs.insert(obs.pretreatment);
 			}
 
 			// Add data row to Experimental ID map, for calculation of 

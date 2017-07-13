@@ -38,11 +38,11 @@ sampleArrayCast = function(flat) {
 }
 
 # Dose-response model
-response <- function(conc, par) {
-	K <- par[1]
-	h <- par[2]
-	alpha <- par[3]
-	out <- ((1 - alpha) / (1 + (K * conc)^h)) + alpha
+response = function(conc, par) {
+	K = par[1]
+	h = par[2]
+	alpha = par[3]
+	out = ((1 - alpha) / (1 + (K * conc)^h)) + alpha
 	return(out)
 }
 
