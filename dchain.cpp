@@ -1,4 +1,4 @@
-// mcmcGlobal.cpp
+// dchain.cpp
 //
 // Global MCMC analysis of systematic cell viability screen. Parametric curve fits using selector
 // variables to fall back on baseline models. Experiment types AB, A, A0 have their own, albeit, related
@@ -11,7 +11,7 @@
 // by constructing experimental id's.
 // Input csv file must not contain quoted strings.
 // 
-// Compilation:  g++ -O mcmcGlobal.cpp -o mcmcGlobal -lboost_system -lboost_program_options -lboost_filesystem-mt
+// Compilation:  g++ -O dchain.cpp -o dchain -lboost_system -lboost_program_options -lboost_filesystem-mt
 // Uses C++11 and <boost>
 //
 // Old data specification used for analysis
