@@ -211,6 +211,8 @@ summaryStatisticsMCMC = function(mcmc) {
 	}
 
 	d$synergy_index_mean = matrix(NA, length(mcmc$drugs), length(mcmc$drugs))
+	rownames(d$synergy_index_mean) = mcmc$drugs
+	colnames(d$synergy_index_mean) = mcmc$drugs
 	d$synergy_index_sd = matrix(NA, length(mcmc$drugs), length(mcmc$drugs))
 	for (a in 1:length(mcmc$drugs)) {
 		for (b in 1:length(mcmc$drugs)) {
