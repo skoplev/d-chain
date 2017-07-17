@@ -7,7 +7,6 @@ enableJIT(3)
 require(reshape2)
 require(stringr)
 require(abind)
-
 require(dplyr)
 
 # Decodes vector of ; (default) separated strings. 3 parameters by default.
