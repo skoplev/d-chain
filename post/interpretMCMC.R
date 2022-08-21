@@ -71,6 +71,7 @@ parseMCMC = function(folder) {
 
 	# Theta, single drugs
 	theta_tmp = fread(file.path(folder, "theta.csv"),
+		sep=",",
 		header=FALSE)  # baseline parameters
 	theta_tmp = as.data.frame(theta_tmp)
 	colnames(theta_tmp) = d$drugs
@@ -112,6 +113,7 @@ parseMCMC = function(folder) {
 	# Load rows of vectors of parameter sets.
 	# Each row vector encodes a complete set of combinatorial parameter sets.
 	theta_AB_tmp = fread(file.path(folder, "theta_AB.csv"),
+		sep=",",
 		header=FALSE)
 
 	# Parse parameters
